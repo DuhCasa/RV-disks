@@ -6,7 +6,7 @@ Disk refurbishing utilities
 underprivileged children/families in Slovenia.
 
 [Resource-based economy]: http://thevenusproject.com/about/resource-based-economy
-[Zeitgeist, the Slovenian Sustainability Society]: http://www.duh-casa.si/en
+[Zeitgeist, the Slovenian Sustainability Society]: http://www.duh-casa.si/en/o-nas/
 [1]: http://www.duh-casa.si/en/projekti/racunalniki-za-socialno-ogrozene/
 
 There are a couple of tools in this repository:
