@@ -1,0 +1,42 @@
+#!/bin/bash
+
+if [ "$#" != "1" ]; then
+    echo \
+"Usage: $0 /dev/sdX
+
+Wipes data on disk /dev/sdX."
+    exit 0
+fi
+
+if [ $EUID -gt 500 ]; then
+    echo "Error: You are not root."
+    exit 1
+fi
+
+DISK="$1"
+
+# From https://wiki.archlinux.org/index.php/Securely_wipe_disk#Advanced_example
+
+DISK_SIZE=$(df -B1 $DISK | tail -n1 | tr -s ' ' | cut -d' ' -f2)
+PHYS_BLOCK_SIZE=$(cat /sys/block/$(basename $DISK)/queue/physical_block_size)
+NUM_BLOCKS=$((DISK_SIZE / PHYS_BLOCK_SIZE))
+random_pass() { dd if=/dev/random bs=128 count=1 2>/dev/null | base64; }
+
+# TODO: account for effective writing speed
+write_random() {
+    echo "Writing random data to disk: $DISK"
+    openssl enc -aes-256-ctr -pass pass:"$(random_pass)" -nosalt </dev/zero |
+        pv -bartpes $DISK_SIZE |
+        dd bs=$PHYS_BLOCK_SIZE count=$NUM_BLOCKS of=$DISK
+}
+
+write_zeros() {
+    echo "Writing zeros to disk: $DISK"
+    cat /dev/zero |
+        pv -bartpes $DISK_SIZE |
+        dd bs=$PHYS_BLOCK_SIZE count=$NUM_BLOCKS of=$DISK
+}
+
+for func in write_random write_random write_zeros; do
+    $func
+done

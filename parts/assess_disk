@@ -1,0 +1,49 @@
+#!/bin/bash
+
+if [ "$#" != "1" ]; then
+    echo \
+"Usage: $0 /dev/sdX
+
+Checks if disk /dev/sdX is OK to be used."
+    exit 0
+fi
+
+if [ $EUID -gt 500 ]; then
+    echo "Error: You are not root."
+    exit 1
+fi
+
+DISK="$1"
+LOG_FILE="disk_serials.txt"
+
+indent() { sed 's/^/    /'; }
+
+echo "Running S.M.A.R.T short test on: $DISK"
+smartctl --smart on --badsum exit --captive --test short --quietmode errorsonly $DISK
+if sudo smartctl --health --quietmode errorsonly $DISK; then
+    echo "Health-check PASSED"
+else
+    echo "Health-check FAILED"
+    exit 1
+fi
+
+get_smart_data() {
+    smartctl --all $DISK |
+        awk '/Reallocated_Sector|Current_Pending_Sector|Bad_Block|Uncorrectable/{ print $0 }'
+}
+
+value=$(get_smart_data | awk '{ print $10 }' |
+            paste -sd+ |
+            bc)  # sum all attribute values
+
+if [ "$value" = '0' ]; then
+    echo ''
+    smartctl --info $DISK |
+        awk '/^Device Model|Serial Number|User Capacity/{ print $0\n }END{ print "\n" }' |
+        tee -a "$LOG_FILE"
+    echo "(also appended to $LOG_FILE)"
+else
+    echo "Disk is NOT OK; SMART data:"
+    echo "$(get_smart_data)" | indent
+    exit 1
+fi
