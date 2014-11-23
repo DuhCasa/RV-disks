@@ -60,7 +60,7 @@ chroot "$CHROOT" apt-get -qqyy update
 chroot "$CHROOT" apt-get -yy install $packages
 # Run the post-installation scripts
 if [ "$scripts" ]; then
-    mkdir "$CHROOT/tmp/$scripts"
+    mkdir -p "$CHROOT/tmp/$scripts"
     mount --bind "$scripts" "$CHROOT/tmp/$scripts"
     chroot "$CHROOT" run-parts --verbose --exit-on-error "$scripts"
     umount "$CHROOT"/tmp
