@@ -1,12 +1,12 @@
 Disk refurbishing utilities
 ===========================
 
-Once Slovenian fraction of the [Zeitgeist Movement], [Duh časa], is
+[Zeitgeist, the Slovenian Sustainability Society] that work in direction of [Resource-based economy] is
 [refurbishing old and unused PCs][1] so they can be used again by
 underprivileged children/families in Slovenia.
 
-[Zeitgeist Movement]: http://www.thezeitgeistmovement.com/
-[Duh časa]: http://www.duh-casa.si/
+[Resource-based economy]: http://thevenusproject.com/about/resource-based-economy
+[Zeitgeist, the Slovenian Sustainability Society]: http://www.duh-casa.si/en
 [1]: http://www.duh-casa.si/en/projekti/racunalniki-za-socialno-ogrozene/
 
 There are a couple of tools in this repository:
