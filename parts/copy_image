@@ -101,6 +101,15 @@ is made bootable, so you shouldn't specify a separate /boot.
             return run('chroot {root} /bin/sh -c "{command}"'.format(**locals()))
         run_chroot('grub-install --modules=part_msdos --boot-directory=/boot {device}'.format(**locals()))
         run_chroot('rm /boot/grub/device.map; update-grub ; rm /boot/grub/device.map')
+        # Set /etc/fstab
+        with open(root + '/etc/fstab', 'a') as fstab:
+            for i, _, _, fs, mnt in partitions:
+                uuid = run('blkid -o export -s UUID {device}{i}'.format(**locals()))
+                opts = 'rw,errors=remount-ro,noatime' if fs.startswith('ext') else 'defaults'
+                fsck = 1 if mnt == '/' else 2
+                if fs == 'swap':
+                    mnt, fsck = 'swap', 0
+                fstab.write('\n{uuid}  {mnt}  {fs}  {opts}  0  {fsck}\n'.format(**locals()))
 
 if __name__ == '__main__':
     sys.exit(main())
