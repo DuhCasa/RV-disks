@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+
+import os, sys
+import yaml
+import subprocess
+from tempfile import mkdtemp
+from contextlib import contextmanager
+
+def run(command):
+    return subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
+
+@contextmanager
+def mount(device, partitions):
+    root = mkdtemp()
+    mounted = []
+    try:
+        # Mount the partitions
+        for i, _, _, fs, mnt in sorted(partitions, key=lambda x: len(x[-1])):
+            if mnt == '.': continue
+            path = os.path.join(root, mnt.lstrip('/'))
+            if not os.path.isdir(path): os.mkdir(path)
+            run('mount -t {fs} {device}{i} {path}'.format(**locals()))
+            mounted.append(path)
+        for fs in 'dev proc sys'.split():
+            path = '{root}/{fs}'.format(**locals())
+            run('mount --bind /{fs} {path}'.format(**locals()))
+            mounted.append(path)
+        # Execute whatever while partitions mounted on root
+        yield root
+    finally:
+        # Unmount everything
+        for path in reversed(mounted):
+            run('umount ' + path)
+        os.rmdir(root)
+
+def main():
+    try:
+        _, device, config_file = sys.args
+    except ValueError:
+        sys.exit(
+"""Usage: {} /dev/sdX path/to/config.yml
+
+Formats /dev/sdX according to config file.
+
+Config file is a YAML file illustrated by the following example:
+```
+disk_image: path/to/disk_image.tar.gz
+partitions:
+    # Partitions listed as (size in MB, filesystem, mount point) tuples
+    - 15000 ext4 /
+    # If the mount point is omitted (.), the partition goes unmounted
+    - 4400  swap .
+    # If the size is omitted (.), the partition spans the remaining size
+    - .     ext4 /home
+```
+A normal MBR MS-DOS disklabel is created. Since all partitions are made
+primary, no more than four partitions are allowed. The rootfs partition
+is made bootable, so you shouldn't specify a separate /boot.
+""")
+    if os.geteuid() != 0:
+        sys.exit('You are not root.')
+
+    config = yaml.load(open(config_file).read())
+    disk_image = config['disk_image']
+    partitions = config['partitions']
+
+    def size_to_offsets(partitions):
+        start = 2
+        for i, part in enumerate(partitions, 1):
+            size, fs, mnt = part.split()
+            end = '100%' if size == '.' else start + size
+            yield (i, start, end, fs, mnt)
+            start += size + 1
+
+    partitions = list(size_to_offsets(partitions))
+
+    def parted(args):
+        return run('parted --script --align optimal ' + args)
+
+    # Create the partitions on a new MS-DOS disk label
+    parted('{device} mklabel msdos'.format(**locals()))
+    for i, start, end, fs, mnt in partitions:
+        parted('{device} mkpart primary {fs} {start}MB {end}'.format(**locals()))
+        if mnt == '/':
+            # Mark rootfs partition bootable (assume no separate /boot partition)
+            parted('{device} set {i} boot on'.format(**locals()))
+
+    # Format the partitions
+    for i, _, _, fs, mnt in partitions:
+        if fs == 'swap':
+            run('mkswap {device}{i}'.format(**locals()))
+        else:
+            run('mkfs.{fs} {device}{i}'.format(**locals()))
+
+    with mount(device, partitions) as root:
+        # Extract the disk_image
+        run('tar -xzf {disk_image} -C {root}'.format(**locals()))
+        # Fix grub bootloader
+        run('dd if=/dev/zero of={device} bs=512 seek=1 count=2047')
+        def run_chroot(command):
+            return run('chroot {root} /bin/sh -c "{command}"'.format(**locals()))
+        run_chroot('grub-install --modules=part_msdos --boot-directory=/boot {device}'.format(**locals()))
+        run_chroot('rm /boot/grub/device.map; update-grub ; rm /boot/grub/device.map')
+
+if __name__ == '__main__':
+    sys.exit(main())

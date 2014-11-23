@@ -1,0 +1,25 @@
+#!/bin/sh
+
+DEPENDENCIES="
+coreutils
+sed
+# for wipe_disk
+openssl
+pv
+# for asses_disk
+smartmontools
+bc
+# for copy_image
+python-yaml
+parted
+e2fsprogs
+mount
+util-linux
+"
+
+if [ $EUID -gt 500 ]; then
+    echo "Error: You are not root."
+    exit 1
+fi
+
+apt-get install $(echo "$DEPENDENCIES" | awk '/^ *[^# ]/{print $1}')
