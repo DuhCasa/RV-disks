@@ -1,0 +1,80 @@
+#!/bin/bash
+
+if [ "$#" != "1" ]; then
+    echo \
+"Usage: $0 TARGET path/to/config.conf
+
+Builds in the TARGET directory an image defined by POSIX config file."
+    exit 0
+fi
+
+if [ $EUID -gt 500 ]; then
+    echo "Error: You are not root."
+    exit 1
+fi
+
+# Install the packages required for this script, if needed
+required_packages="debootstrap mount tar gzip"
+if ! command -v $required_packages >/dev/null; then
+    apt-get install -qqyy $required_packages
+fi
+
+CHROOT="$1"
+CONFIG="$2"
+
+# Source the config variables
+. "$CONFIG"
+
+if [ ! "$arch" -o \
+     ! "$components" -o \
+     ! "$suite" -o \
+     ! "$mirror" -o \
+     ! "$output_archive" ]; then
+    echo "Error: $CONFIG does not define all the required variables."
+    exit 1
+fi
+
+export LANG=C
+export DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true DEBIAN_PRIORITY=critical  # don't ask any questions
+
+# Install the minimum base
+debootstrap --verbose --arch $arch --components $components $suite "$CHROOT" $mirror
+
+# Set the new sources.list
+cat > "$CHROOT/etc/apt/sources.list" << EOF
+deb $mirror $suite ${components//,/ }
+deb $mirror $suite-updates ${components//,/ }
+deb $mirror $suite-security ${components//,/ }
+$apt_source_lines
+EOF
+
+# Prepare the chroot for installing
+mount --bind /bin/true          "$CHROOT"/usr/bin/ischroot
+mount --bind /etc/resolv.conf   "$CHROOT"/etc/resolv.conf
+mount --bind /proc/mounts       "$CHROOT"/etc/mtab
+for fs in dev proc sys; do mount --bind /$fs "$CHROOT"/$fs ; done
+echo -e "#!/bin/sh\nexit 101" > "$CHROOT"/usr/sbin/policy-rc.d && chmod a+x "$CHROOT"/usr/sbin/policy-rc.d
+
+# Do the magic
+chroot "$CHROOT" apt-get -qqyy update
+chroot "$CHROOT" apt-get -yy install $packages
+# Run the post-installation scripts
+if [ "$scripts" ]; then
+    mkdir "$CHROOT/tmp/$scripts"
+    mount --bind "$scripts" "$CHROOT/tmp/$scripts"
+    chroot "$CHROOT" run-parts --verbose --exit-on-error "$scripts"
+    umount "$CHROOT"/tmp
+fi
+
+# Unprepare the chroot
+rm "$CHROOT"/usr/sbin/policy-rc.d
+for fs in dev proc sys; do umount "$CHROOT"/$fs ; done
+umount "$CHROOT"/etc/mtab
+umount "$CHROOT"/etc/resolv.conf
+umount "$CHROOT"/usr/bin/ischroot
+
+# Clean the directories
+rm -r "$CHROOT"/{tmp,var/tmp,dev,proc,sys,media,mnt,run}/*
+
+# Compress the chroot directory
+tar --exclude-backups -C "$CHROOT" -cf- . | gzip --fast --stdout > "$output_archive"
