@@ -1,0 +1,4 @@
+disk_image: lubuntu.tar.gz
+partitions:
+  - 2200 swap .
+  - .    ext4 /

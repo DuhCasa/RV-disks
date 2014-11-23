@@ -1,0 +1,5 @@
+disk_image: lubuntu.tar.gz
+partitions:
+  - 17000 ext4 /
+  - 4400  swap .
+  - .     ext4 /home
